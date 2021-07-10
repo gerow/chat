@@ -125,6 +125,9 @@ func (s *server) Chat(stream pb.Chat_ChatServer) error {
 		stream:   stream,
 	}
 	s.Lock()
+	if s.users[u.name] != nil {
+		return fmt.Errorf("user with name %s already logged in", u.name)
+	}
 	s.users[u.name] = &u
 	s.Unlock()
 	// cleanup

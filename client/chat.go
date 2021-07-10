@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/dolmen-go/contextio"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
@@ -17,6 +18,7 @@ import (
 func run(c pb.ChatClient, name string) error {
 	ctx := context.Background()
 
+	g, ctx := errgroup.WithContext(ctx)
 	stream, err := c.Chat(ctx)
 	if err != nil {
 		return err
@@ -29,11 +31,11 @@ func run(c pb.ChatClient, name string) error {
 	}
 
 	// And then spawn off two routines: one to handle input and one to print messages we receive.
-	var g errgroup.Group
 	g.Go(func() error {
 		for {
 			msg, err := stream.Recv()
 			if err != nil {
+				log.Printf("got recv err %v", err)
 				return err
 			}
 			switch m := msg.Message.(type) {
@@ -56,7 +58,7 @@ func run(c pb.ChatClient, name string) error {
 		}
 	})
 	g.Go(func() error {
-		s := bufio.NewScanner(os.Stdin)
+		s := bufio.NewScanner(contextio.NewReader(ctx, os.Stdin))
 		log.Print("beginning scan...")
 		for s.Scan() {
 			log.Print("scanned a line")
