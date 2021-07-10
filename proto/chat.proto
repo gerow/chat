@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+option go_package = "github.com/gerow/chat/proto/chat";
+
+message Hello {
+    string name = 1;
+}
+
+message ChatMessage {
+    string channel = 1;
+    string sender = 2;
+    string content = 3;
+}
+
+message Join {
+    string channel = 1;
+    string user = 2;
+}
+
+message Part {
+    string channel = 1;
+    string user = 2;
+}
+
+message Message {
+    oneof message {
+        Hello hello = 1;
+        ChatMessage chat_message = 2;
+        Join join = 3;
+        Part part = 4;
+    }
+}
+
+service Chat {
+    rpc Chat(stream Message) returns (stream Message) {}
+}
