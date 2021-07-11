@@ -1,14 +1,13 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"log"
 	"os"
 	"strings"
 
-	"github.com/dolmen-go/contextio"
+	"github.com/gerow/chat/client/screen"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
@@ -27,6 +26,10 @@ func run(c pb.ChatClient, name string) error {
 	if err := stream.Send(&pb.Message{Message: &pb.Message_Hello{Hello: &pb.Hello{
 		Name: name,
 	}}}); err != nil {
+		return err
+	}
+	s, err := screen.New()
+	if err != nil {
 		return err
 	}
 
@@ -58,11 +61,10 @@ func run(c pb.ChatClient, name string) error {
 		}
 	})
 	g.Go(func() error {
-		s := bufio.NewScanner(contextio.NewReader(ctx, os.Stdin))
-		log.Print("beginning scan...")
-		for s.Scan() {
-			log.Print("scanned a line")
-			t := s.Text()
+		for {
+			e := s.GetEntry()
+			t := e.Line
+			channel := e.Channel
 			switch {
 			case strings.HasPrefix(t, "/join"):
 				fields := strings.Fields(t)
@@ -90,14 +92,13 @@ func run(c pb.ChatClient, name string) error {
 				}
 			default:
 				if err := stream.Send(&pb.Message{Message: &pb.Message_ChatMessage{ChatMessage: &pb.ChatMessage{
-					Channel: "test",
+					Channel: channel,
 					Content: t,
 				}}}); err != nil {
 					return err
 				}
 			}
 		}
-		return s.Err()
 	})
 
 	return g.Wait()
