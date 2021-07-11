@@ -12,7 +12,6 @@ import (
 
 type Screen struct {
 	s        tcell.Screen
-	channelM map[string]*channel
 	channels []*channel
 	cur      int
 	entryC   chan Entry
@@ -37,6 +36,7 @@ func New() (*Screen, error) {
 	sc := &Screen{
 		s:        s,
 		channels: []*channel{{name: "*status"}},
+		entryC:   make(chan Entry),
 	}
 	if err := s.Init(); err != nil {
 		return nil, err
@@ -44,6 +44,10 @@ func New() (*Screen, error) {
 	go sc.loop()
 
 	return sc, nil
+}
+
+func (s *Screen) Fini() {
+	//s.Fini()
 }
 
 func (s *Screen) setString(x, y int, style tcell.Style, str string) int {
@@ -73,9 +77,9 @@ func (s *Screen) reDraw() {
 	x := 0
 	for n := range s.channels {
 		if s.cur == n {
-			x += s.setString(x, y, tcell.StyleDefault, "["+strconv.Itoa(n)+"] ")
+			x += s.setString(x, y, tcell.StyleDefault, "["+strconv.Itoa(n)+"]")
 		} else {
-			x += s.setString(x, y, tcell.StyleDefault, " "+strconv.Itoa(n)+"  ")
+			x += s.setString(x, y, tcell.StyleDefault, " "+strconv.Itoa(n)+" ")
 		}
 	}
 	// now draw the input line
@@ -93,7 +97,7 @@ func (s *Screen) reDraw() {
 	y--
 	i := len(c.lines) - 1
 	for ; y >= 0; y-- {
-		if len(c.lines) <= 0 {
+		if i < 0 {
 			break
 		}
 		// TODO: handle wrapping
@@ -112,6 +116,7 @@ func (s *Screen) loop() {
 		case *tcell.EventResize:
 			s.reDraw()
 		case *tcell.EventKey:
+			log.Printf("key: %v", ev.Key())
 			switch ev.Key() {
 			case tcell.KeyCtrlN:
 				s.cur += 1
@@ -121,22 +126,26 @@ func (s *Screen) loop() {
 				s.reDraw()
 			case tcell.KeyCtrlP:
 				s.cur -= 1
-				if s.cur <= 0 {
+				if s.cur < 0 {
 					s.cur = len(s.channels) - 1
 				}
 				s.reDraw()
-			case tcell.KeyBackspace:
+			case tcell.KeyBackspace, tcell.KeyBackspace2:
+				log.Print("handling backspace")
 				c := s.channels[s.cur]
 				if c.buf.Len() != 0 {
-					s.channels[s.cur].buf.UnreadRune()
+					// TODO: this almost certainly doesn't handle wide unicode values properly
+					c.buf.Truncate(c.buf.Len() - 1)
 				}
 				s.reDraw()
 			case tcell.KeyEnter:
 				c := s.channels[s.cur]
+				log.Printf("sending entry for line %s", c.buf.String())
 				s.entryC <- Entry{
 					Channel: c.name,
 					Line:    c.buf.String(),
 				}
+				log.Print("sent entry")
 				c.buf.Truncate(0)
 				s.reDraw()
 			case tcell.KeyRune:
@@ -148,12 +157,23 @@ func (s *Screen) loop() {
 }
 
 func (s *Screen) JoinChannel(name string) {
+	s.channels = append(s.channels, &channel{
+		name: name,
+	})
+	s.cur = len(s.channels) - 1
+	s.reDraw()
 }
 
 func (s *Screen) PartChannel(name string) {
 }
 
 func (s *Screen) AddLine(channel, line string) {
+	for _, c := range s.channels {
+		if c.name == channel {
+			c.lines = append(c.lines, line)
+			s.reDraw()
+		}
+	}
 }
 
 func (s *Screen) GetEntry() Entry {

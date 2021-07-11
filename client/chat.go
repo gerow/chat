@@ -46,15 +46,15 @@ func run(c pb.ChatClient, name string) error {
 				channel := m.ChatMessage.Channel
 				content := m.ChatMessage.Content
 				sender := m.ChatMessage.Sender
-				fmt.Printf("[%s] %s: %s\n", channel, sender, content)
+				s.AddLine(channel, sender+": "+content)
 			case *pb.Message_Join:
 				channel := m.Join.Channel
 				user := m.Join.User
-				fmt.Printf("[%s] * %s has joined the channel *\n", channel, user)
+				s.AddLine(channel, "* "+user+" has joined the channel *")
 			case *pb.Message_Part:
 				channel := m.Part.Channel
 				user := m.Part.User
-				fmt.Printf("[%s] * %s has parted the channel *\n", channel, user)
+				s.AddLine(channel, "* "+user+" has parted the channel *")
 			default:
 				return fmt.Errorf("message has unexpected type %T", m)
 			}
@@ -62,7 +62,9 @@ func run(c pb.ChatClient, name string) error {
 	})
 	g.Go(func() error {
 		for {
+			log.Print("attempting to get entry")
 			e := s.GetEntry()
+			log.Printf("got entry %v", e)
 			t := e.Line
 			channel := e.Channel
 			switch {
@@ -78,6 +80,7 @@ func run(c pb.ChatClient, name string) error {
 				}}}); err != nil {
 					return err
 				}
+				s.JoinChannel(channel)
 			case strings.HasPrefix(t, "/part"):
 				fields := strings.Fields(t)
 				if len(fields) != 2 {
@@ -90,6 +93,9 @@ func run(c pb.ChatClient, name string) error {
 				}}}); err != nil {
 					return err
 				}
+			case t == "/quit":
+				s.Fini()
+				os.Exit(0)
 			default:
 				if err := stream.Send(&pb.Message{Message: &pb.Message_ChatMessage{ChatMessage: &pb.ChatMessage{
 					Channel: channel,
@@ -97,6 +103,7 @@ func run(c pb.ChatClient, name string) error {
 				}}}); err != nil {
 					return err
 				}
+				s.AddLine(channel, name+": "+t)
 			}
 		}
 	})
